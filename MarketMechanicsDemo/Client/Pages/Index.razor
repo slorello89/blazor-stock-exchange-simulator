@@ -1,0 +1,54 @@
+﻿@page "/"
+@using MarketMechanicsDemo.Shared;
+@inject HttpClient Http;
+
+<h1>Place an Order</h1>
+Buy Or Sell: 
+<br/>
+<select class="custom-select-sm" @bind="@_order.BuyOrSell">
+    <option value="@BuySell.Buy">Buy</option>
+    <option value="@BuySell.Sell">Sell</option>
+</select> 
+<br />
+Shares:
+<br />
+<input @bind="@_order.NumSharesInital" placeholder="Price" class="input-group-text" />
+Symbol:
+<br />
+<input @bind="@_order.Symbol" placeholder="Symbol" class="input-group-text" />
+Order or Limit:
+<br />
+<select class="custom-select-sm" @bind="@_order.LimitOrMarket">
+    <option value="@LimitMarket.Limit">Limit</option>
+    <option value="@LimitMarket.Market">Market</option>
+</select>
+<br />
+Price:
+<input @bind="@_order.Price" placeholder="Price" class="input-group-text" /><br />
+<button class="btn btn-primary" @onclick="SendOrder">Send Order</button>
+
+@if (_lastOrderFilled?.NumSharesRemaining == 0)
+{
+    <h2>Order Filled!</h2>
+}
+else if(_lastOrderFilled?.NumSharesRemaining > 0)
+{
+    <h2>Order Pending</h2>
+}
+
+@code{
+
+    private Order _order { get; set; } = new Order();
+    private Order _lastOrderFilled;
+
+
+    public async Task SendOrder()
+    {
+        _order.NumSharesRemaining = _order.NumSharesInital;
+        var response = await Http.PostAsJsonAsync<Order>("/order/placeOrder", _order);
+        var json = await response.Content.ReadAsStringAsync();
+        _lastOrderFilled = System.Text.Json.JsonSerializer.Deserialize<Order>(json);         
+        _order = new Order();
+        StateHasChanged();
+    }
+}

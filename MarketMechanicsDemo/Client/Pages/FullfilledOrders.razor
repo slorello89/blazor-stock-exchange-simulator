@@ -1,0 +1,61 @@
+﻿@page "/FilledOrders"
+@using MarketMechanicsDemo.Shared
+@using Microsoft.AspNetCore.SignalR.Client
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+@implements IDisposable
+<h3>Filled Orders</h3>
+
+<table style="width:80%; max-height:80%; overflow-y:auto" class="table-bordered">
+    <thead class="table-active">
+        <tr>
+            <th>Order ID</th>
+            <th>Transaction Type</th>
+            <th>Trade Type</th>
+            <th>Symbol</th>
+            <th>Order Size</th>
+            <th>Price</th>
+            <th>Filled Price</th>
+            <th>Filled Price Per Share</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var order in _orders)
+        {
+            <tr>
+                <td>@order.OrderId</td>
+                <td>@order.BuyOrSell</td>
+                <td>@order.LimitOrMarket</td>
+                <td>@order.Symbol</td>
+                <td>@order.NumSharesInital</td>
+                <td>@order.Price</td>
+                <td>@order.FillPrice</td>
+                <td>@Math.Round(order.FillPrice/(double)order.NumSharesInital,2)</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<Order> _orders = new List<Order>();
+    private HubConnection _hubConnection;
+    protected override async Task OnInitializedAsync()
+    {
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/orderhub"))
+            .Build();
+        _hubConnection.On<IEnumerable<Order>>("updateOrders", (updatedOrders) =>
+        {
+            var ordersToAdd = updatedOrders.Where(o => !_orders.Select(x => x.OrderId).Contains(o.OrderId) && o.NumSharesRemaining == 0);
+            _orders.AddRange(ordersToAdd);
+            StateHasChanged();
+        });
+
+        _orders = await Http.GetFromJsonAsync<List<Order>>("/order/getFilledOrders");
+    }    
+
+    public void Dispose()
+    {
+        _ = _hubConnection?.DisposeAsync();
+    }
+}

@@ -1,0 +1,137 @@
+﻿@page "/PendingOrders/{IsSell:bool}"
+@using MarketMechanicsDemo.Shared
+@using Microsoft.AspNetCore.SignalR.Client
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@implements IDisposable
+@if (IsSell)
+{
+    <h3>Pending Sale Orders</h3>
+}
+else
+{
+    <h3>Pending Buy Orders</h3>
+}
+
+
+<label for="symbolSelect">Choose a Symbol</label>
+<select name="symbolSelect" class="custom-select-sm" @onchange="@GetOrders">    
+    @foreach (var symbol in _symbols)
+    {
+        <option value="@symbol">@symbol</option>
+    }
+</select>
+
+<table style="width:80%; max-height:80%; overflow-y:auto" class="table-bordered">
+    <thead>
+        <tr>
+            <th>Transaction Type</th>
+            <th>Symbol</th>
+            <th>Shares</th>
+            <th>Order Type</th>
+            <th>Price</th>
+            <th>Shares Remaining</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var order in _orders)
+        {
+            <tr>
+                <td>@order.BuyOrSell.ToString()</td>
+                <td>@order.Symbol</td>
+                <td>@order.NumSharesInital</td>
+                <td>@order.LimitOrMarket.ToString()</td>
+                <td>@order.Price</td>
+                <td>@order.NumSharesRemaining</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    public bool _isSell;
+    [Parameter]
+    public bool IsSell
+    {
+        get
+        {
+            return _isSell;
+        }
+        set
+        {
+            _isSell = value;
+            _ = GetOrders(new ChangeEventArgs { Value = _symbols.FirstOrDefault() });
+        }
+    }
+
+    private HubConnection _hubConnection;
+
+    private List<Order> _orders = new List<Order>();
+
+    private List<string> _symbols = new List<string>();
+
+    private string _selectedSymbol;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/orderhub"))
+            .Build();
+        _hubConnection.On<IEnumerable<Order>>("updateOrders", (updatedOrders) =>
+        {
+            try
+            {
+                var ordersToUpdate = updatedOrders.Where(o => _orders.Select(x => x.OrderId).Contains(o.OrderId) && o.NumSharesRemaining > 0);
+                var ordersToAdd = updatedOrders.Where(o => !_orders.Select(x => x.OrderId).Contains(o.OrderId) && o.NumSharesRemaining > 0 && (o.BuyOrSell == BuySell.Sell) == _isSell);
+                var ordersToRemove = updatedOrders.Where(o => o.NumSharesRemaining == 0).Select(o => o.OrderId);         
+                //delete
+                _orders = _orders.Where(o => !ordersToRemove.Contains(o.OrderId)).ToList();
+                //update
+                ordersToUpdate.ToList().ForEach(o =>
+                {
+                    var order = _orders.Where(x => x.OrderId == o.OrderId).First();
+                    var index = _orders.IndexOf(order);
+                    _orders[index] = o;
+                });
+                //add
+                _orders.AddRange(ordersToAdd);
+                StateHasChanged();
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        });
+        await _hubConnection.StartAsync();
+        _symbols = await Http.GetFromJsonAsync<List<string>>("/order/getsymbols");
+        StateHasChanged();
+        if (_symbols.Any())
+        {
+            await GetOrders(new ChangeEventArgs { Value = _symbols.First() });
+        }
+
+    }
+
+    public async Task GetOrders(ChangeEventArgs e)
+    {
+        _selectedSymbol = (string)e.Value;
+        Console.WriteLine(_selectedSymbol);
+        if (!string.IsNullOrEmpty(_selectedSymbol))
+        {
+            if (IsSell)
+            {
+                _orders = await Http.GetFromJsonAsync<List<Order>>($"/order/getPendingOrders?symbol={_selectedSymbol}&type={BuySell.Sell}");
+            }
+            else
+            {
+                _orders = await Http.GetFromJsonAsync<List<Order>>($"/order/getPendingOrders?symbol={_selectedSymbol}&type={BuySell.Buy}");
+            }
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _ = _hubConnection?.DisposeAsync();
+    }
+}
