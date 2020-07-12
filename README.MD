@@ -10,4 +10,4 @@ Navigate to the `/MarketMechanicsDemo.Server` and run `dotnet run`, it will laun
 
 From here you can enter simulated orders and the book will be updated based off the rules of an Order Book.
 
-Check out [the post](https://slorello.com/posts/build-stock-market-simulator-with-blazor-webassembly) associated with this demo to learn how to build it!
+Check out [the post](https://slorello.com/posts/simulate-a-stock-exchange-with-blazor-webassembly) associated with this demo to learn how to build it!
